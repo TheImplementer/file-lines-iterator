@@ -22,6 +22,7 @@ public class FileLinesIterator implements Iterator<Line> {
     private long filePosition;
     private int positionInBuffer;
     private int lineLength;
+    private StringBuilder stringBuilder;
 
     public FileLinesIterator(File input) throws IOException {
         this.input = input;
@@ -32,6 +33,7 @@ public class FileLinesIterator implements Iterator<Line> {
         this.buffer.flip();
         this.filePosition = 0;
         this.positionInBuffer = 0;
+        this.stringBuilder = new StringBuilder();
     }
 
     @Override
@@ -47,7 +49,7 @@ public class FileLinesIterator implements Iterator<Line> {
         }
 
         lineLength = 0;
-        final StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.setLength(0);
 
         while (true) {
             if (!refillBufferIfNeeded()) break;

@@ -76,7 +76,7 @@ public class FileLinesIterator implements Iterator<Line> {
 
     private boolean isCarriageReturnFollowedByLineFeed(char nextChar) {
         if (nextChar == CARRIAGE_RETURN && positionInBuffer + 1 < bufferSize) {
-            final int followingCharacter = (char) buffer[positionInBuffer + 1];
+            final char followingCharacter = (char) buffer[positionInBuffer + 1];
             return followingCharacter == LINE_FEED;
         }
         return false;

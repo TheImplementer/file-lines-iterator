@@ -3,8 +3,6 @@ package com.github.theimplementer.filelinesiterator;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
@@ -16,22 +14,18 @@ public class FileLinesIterator implements Iterator<Line> {
     private static final char CARRIAGE_RETURN = '\r';
     private static final int BUFFER_LENGTH = 8192;
 
-    private final File input;
+    private final FileInputStream inputStream;
 
-    private ByteBuffer buffer;
-    private long filePosition;
+    private byte[] buffer;
     private int positionInBuffer;
+    private int bufferSize;
     private int lineLength;
     private StringBuilder stringBuilder;
 
     public FileLinesIterator(File input) throws IOException {
-        this.input = input;
-        this.buffer = ByteBuffer.allocate(BUFFER_LENGTH);
-        final FileInputStream fileInputStream = new FileInputStream(input);
-        final FileChannel channel = fileInputStream.getChannel();
-        channel.read(buffer, filePosition);
-        this.buffer.flip();
-        this.filePosition = 0;
+        this.buffer = new byte[BUFFER_LENGTH];
+        this.inputStream = new FileInputStream(input);
+        this.bufferSize = inputStream.read(buffer);
         this.positionInBuffer = 0;
         this.stringBuilder = new StringBuilder();
     }
@@ -39,12 +33,17 @@ public class FileLinesIterator implements Iterator<Line> {
     @Override
     public boolean hasNext() {
         refillBufferIfNeeded();
-        return buffer.limit() != 0;
+        if (bufferSize == -1) {
+            closeInputStream();
+            return false;
+        }
+        return true;
     }
 
     @Override
     public Line next() {
-        if (buffer.limit() == 0) {
+        if (bufferSize == -1) {
+            closeInputStream();
             throw new NoSuchElementException();
         }
 
@@ -53,7 +52,7 @@ public class FileLinesIterator implements Iterator<Line> {
 
         while (true) {
             if (!refillBufferIfNeeded()) break;
-            final char nextChar = (char) buffer.get(positionInBuffer);
+            final char nextChar = (char) buffer[positionInBuffer];
             if (!isLineDelimiter(nextChar)) {
                 stringBuilder.append(nextChar);
             } else if (isCarriageReturnFollowedByLineFeed(nextChar)) {
@@ -64,6 +63,7 @@ public class FileLinesIterator implements Iterator<Line> {
 
         }
         if (lineLength == 0) {
+            closeInputStream();
             throw new NoSuchElementException();
         }
         return line(stringBuilder.toString(), lineLength);
@@ -72,38 +72,36 @@ public class FileLinesIterator implements Iterator<Line> {
     private void incrementCounters() {
         lineLength++;
         positionInBuffer++;
-        filePosition++;
     }
 
     private boolean isCarriageReturnFollowedByLineFeed(char nextChar) {
-        if (nextChar == CARRIAGE_RETURN && positionInBuffer + 1 < buffer.limit()) {
-            final int followingCharacter = (char) buffer.get(positionInBuffer + 1);
+        if (nextChar == CARRIAGE_RETURN && positionInBuffer + 1 < bufferSize) {
+            final int followingCharacter = (char) buffer[positionInBuffer + 1];
             return followingCharacter == LINE_FEED;
         }
         return false;
     }
 
     private boolean refillBufferIfNeeded() {
-        if (positionInBuffer < buffer.limit()) return true;
+        if (positionInBuffer < bufferSize) return true;
         try {
-            final FileInputStream fileInputStream = new FileInputStream(input);
-            final FileChannel fileChannel = fileInputStream.getChannel();
-            final int bytesRead = fileChannel.read(buffer, filePosition);
-            if (bytesRead == -1) {
-                buffer.limit(0);
-            } else {
-                buffer.limit(bytesRead);
-                buffer.rewind();
-                positionInBuffer = 0;
-            }
-            fileInputStream.close();
+            bufferSize = inputStream.read(buffer);
+            positionInBuffer = 0;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return buffer.hasRemaining();
+        return bufferSize > 0;
     }
 
     private boolean isLineDelimiter(char aChar) {
         return aChar == LINE_FEED || aChar == CARRIAGE_RETURN;
+    }
+
+    private void closeInputStream() {
+        try {
+            inputStream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
